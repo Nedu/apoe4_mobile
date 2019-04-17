@@ -48,6 +48,7 @@ import hng.tech.apoe_4.retrofit.ApiInterface;
 import hng.tech.apoe_4.retrofit.responses.QuestionsResponse;
 import hng.tech.apoe_4.retrofit.responses.WeatherResponse;
 import hng.tech.apoe_4.utils.DataUtil;
+import hng.tech.apoe_4.utils.PermisionManager;
 import hng.tech.apoe_4.utils.ProgressAnim;
 import im.delight.android.location.SimpleLocation;
 import okhttp3.OkHttpClient;
@@ -81,8 +82,7 @@ public class TodayFragment extends Fragment {
     TextView tempText;
 
 
-
-    private float from = (float)10;
+    private float from = (float) 10;
     private float to;
     private String temp;
     double progress;
@@ -98,6 +98,7 @@ public class TodayFragment extends Fragment {
     private String arrayName;
     private List<QuestionData> questionDataList;
     private List<AnswerData> answerDataList;
+    private int LOCATION_REQUEST_CODE = 1;
 
 
     @Override
@@ -113,31 +114,30 @@ public class TodayFragment extends Fragment {
 
         } else {
             location.beginUpdates();
+            if (ContextCompat.checkSelfPermission(getContext(),
+                    Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                Toast.makeText(getActivity(), "You have already granted this permission!",
+                        Toast.LENGTH_SHORT).show();
+            } else {
+                requestStoragePermission();
+            }
         }
 
     }
 
+    private void requestStoragePermission() {
+        PermisionManager.requestPermision(getContext(), LOCATION_REQUEST_CODE, getActivity());
+    }
+
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        switch (requestCode){
-            case 421:{
-                if (grantResults.length > 0
-                        && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    // permission was granted, yay! Do the
-                    // contacts-related task you need to do.
-                    location.beginUpdates();
-                } else {
-                    // permission denied, boo! Disable the
-                    // functionality that depends on this permission.
-
-                    Toast.makeText(getContext(), "Permission denied", Toast.LENGTH_SHORT).show();
-                }
-                return;
-
+        if (requestCode == LOCATION_REQUEST_CODE) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                Toast.makeText(getContext(), "Permission GRANTED", Toast.LENGTH_SHORT).show();
+                location.beginUpdates();
+            } else {
+                Toast.makeText(getContext(), "Permission DENIED", Toast.LENGTH_SHORT).show();
             }
-
-            default:
-                return;
         }
     }
 
@@ -173,7 +173,7 @@ public class TodayFragment extends Fragment {
                 List<QuestionsResponse> responses = response.getSnapshots();
 
                 List<String> answers = model.getAnswers();
-                for (int i =0; i < answers.size(); i++){
+                for (int i = 0; i < answers.size(); i++) {
                     Button anAnswer = new Button(getActivity());
                     anAnswer.setGravity(Gravity.CENTER);
                     anAnswer.setAllCaps(false);
@@ -185,7 +185,7 @@ public class TodayFragment extends Fragment {
                     anAnswer.setText(answers.get(i));
                     anAnswer.setId(i);
                     holder.answersContainer.addView(anAnswer);
-                    LinearLayout.LayoutParams params = (LinearLayout.LayoutParams)anAnswer.getLayoutParams();
+                    LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) anAnswer.getLayoutParams();
 
 
                     params.setMargins(10, 10, 10, 10); //substitute parameters for left, top, right, bottom
@@ -194,8 +194,8 @@ public class TodayFragment extends Fragment {
                     anAnswer.setOnClickListener(v -> {
 
 //                        questions_view.removeViewAt(position);
-                        for (QuestionsResponse questionsResponse : responses){
-                            if (questionsResponse.getText().equals(model.getText())){
+                        for (QuestionsResponse questionsResponse : responses) {
+                            if (questionsResponse.getText().equals(model.getText())) {
                                 Toast.makeText(getActivity().getBaseContext(), questionsResponse.getText(), Toast.LENGTH_SHORT).show();
 //                                adapter.getSnapshots().remove(position);
                             }
@@ -229,13 +229,12 @@ public class TodayFragment extends Fragment {
         };
 
 
-
         db.collection("questions")
                 .get().addOnCompleteListener(new OnCompleteListener<QuerySnapshot>() {
             @Override
             public void onComplete(@NonNull Task<QuerySnapshot> task) {
-                if (task.isSuccessful()){
-                    for (QueryDocumentSnapshot documentSnapshot : task.getResult()){
+                if (task.isSuccessful()) {
+                    for (QueryDocumentSnapshot documentSnapshot : task.getResult()) {
 //                        Log.e("aTag", documentSnapshot.getId() + " => " +  documentSnapshot.getData());
 
                     }
@@ -250,7 +249,6 @@ public class TodayFragment extends Fragment {
         questions_view.setAdapter(adapter);
 
 
-
 // construct a new instance of SimpleLocation
         location = new SimpleLocation(getActivity());
 
@@ -259,12 +257,11 @@ public class TodayFragment extends Fragment {
             // ask the user to enable location access
             Toast.makeText(getActivity(), "Enable Location Permission", Toast.LENGTH_LONG).show();
             SimpleLocation.openSettings(getActivity());
-        }else {
-            lat  =location.getLatitude();
-            lng= location.getLongitude();
-            Log.d("TAG", "location-> " + lat + " " + lng );
+        } else {
+            lat = location.getLatitude();
+            lng = location.getLongitude();
+            Log.d("TAG", "location-> " + lat + " " + lng);
         }
-
 
 
         HttpLoggingInterceptor loggingInterceptor = new HttpLoggingInterceptor();
@@ -292,30 +289,37 @@ public class TodayFragment extends Fragment {
 
         ApiInterface apiInterface = mRetrofit.create(ApiInterface.class);
 
-        apiInterface.getWeather(lng, lat).enqueue(new Callback<WeatherResponse>() {
-            @Override
-            public void onResponse(Call<WeatherResponse> call, Response<WeatherResponse> response) {
-                if (response.isSuccessful()) {
-                    double temp = lat == 0 ? 27.6 : response.body().getMain().getTemp();
-                    double tempMax = lat == 0 ? 36.5 : response.body().getMain().getTempMax();
-                    Log.d("TAG", "temp: " + temp);
-                    Log.d("TAG", "tempMax: " + tempMax);
+        if (lng == 0.0 && lat == 0.0) {
+            lng = location.getLongitude();
+            lat = location.getLatitude();
 
-                    progress = (temp / tempMax) * 100;
-                    Log.d("TAG", "progress: " + progress);
+        } else {
+            apiInterface.getWeather(lng, lat).enqueue(new Callback<WeatherResponse>() {
+                @Override
+                public void onResponse(Call<WeatherResponse> call, Response<WeatherResponse> response) {
+                    if (response.isSuccessful()) {
+                        double temp = lat == 0 ? 27.6 : response.body().getMain().getTemp();
+                        double tempMax = lat == 0 ? 36.5 : response.body().getMain().getTempMax();
+                        Log.d("TAG", "temp: " + temp);
+                        Log.d("TAG", "tempMax: " + tempMax);
+
+                        progress = (temp / tempMax) * 100;
+                        Log.d("TAG", "progress: " + progress);
 
 //                    tempProgress.setProgress((int) progress);
-                    setAnimation();
+                        setAnimation();
 
-                    tempText.setText(String.valueOf((int) temp) + degree +"C");
+                        tempText.setText(String.valueOf((int) temp) + degree + "C");
+                    }
                 }
-            }
 
-            @Override
-            public void onFailure(Call<WeatherResponse> call, Throwable t) {
+                @Override
+                public void onFailure(Call<WeatherResponse> call, Throwable t) {
 
-            }
-        });
+                }
+            });
+        }
+
 
         getSleepTime();
         getStepNumber();
@@ -325,31 +329,31 @@ public class TodayFragment extends Fragment {
     }
 
 
-
     //this method helps with animating progress bar
 
     private void setAnimation() {
-        to = (float)progress;
+        to = (float) progress;
         ProgressAnim anim = new ProgressAnim(tempProgress, from, to);
         anim.setDuration(2000);
         tempProgress.startAnimation(anim);
     }
 
     //this method the amount of sleep later
-    private  void getSleepTime () {
-        to = (float)80;
+    private void getSleepTime() {
+        to = (float) 80;
         ProgressAnim anim = new ProgressAnim(sleepProgress, from, to);
         anim.setDuration(2000);
         sleepProgress.startAnimation(anim);
     }
 
     //this method the amount of steps later
-    private  void getStepNumber () {
-        to = (float)90;
+    private void getStepNumber() {
+        to = (float) 90;
         ProgressAnim anim = new ProgressAnim(stepsProgress, from, to);
         anim.setDuration(2000);
         stepsProgress.startAnimation(anim);
     }
+
     //this prepares the recycler view
     private void setRecyclerView() {
         linearLayoutManager = new LinearLayoutManager(getContext());
@@ -359,9 +363,10 @@ public class TodayFragment extends Fragment {
 //        questions_view.setAdapter(questionAdapter);
 
     }
+
     // this methods fetch the data from the json asset file and displays the data
-    public void showData(){
-        questionDataList = DataUtil.openTheData(getContext(),assetName);
+    public void showData() {
+        questionDataList = DataUtil.openTheData(getContext(), assetName);
         if (questionDataList.size() != 0) {
             questionAdapter.setQuestionDataList(questionDataList);
 
@@ -372,7 +377,8 @@ public class TodayFragment extends Fragment {
     public static TodayFragment newInstance() {
         return new TodayFragment();
     }
-    class QuestionsHolder extends RecyclerView.ViewHolder{
+
+    class QuestionsHolder extends RecyclerView.ViewHolder {
 
         @BindView(R.id.question_title)
         TextView textTitle;
@@ -382,6 +388,7 @@ public class TodayFragment extends Fragment {
 
         @BindView(R.id.answersContainer)
         LinearLayout answersContainer;
+
         public QuestionsHolder(@NonNull View itemView) {
             super(itemView);
 
